@@ -4,18 +4,12 @@ import org.apache.spark.broadcast.Broadcast
 
 import scala.collection.mutable
 import org.apache.spark.sql._
-import org.apache.spark.sql.expressions.{Window, WindowSpec}
+import org.apache.spark.sql.expressions._
 import org.apache.spark.sql.functions._
 
 
 
 object BostonCrime extends App{
-
-//  def countItems(inputList: List[Any]): Map[Any, Int] = {
-//    inputList.groupBy(identity).mapValues(_.size)
-//  }
-//  val l = List('a', 'a', 'b', 'c')
-//  println(countItems(l))
 
 
   val source1Folder: String = args(0)
@@ -56,17 +50,20 @@ object BostonCrime extends App{
     )
 
   val window_1: WindowSpec = Window.partitionBy($"DISTRICT").orderBy($"count".desc)
-  val window_2: WindowSpec = Window.partitionBy($"DISTRICT")
-  val district_2 = crime
+  val district_2_ = crime
     .groupBy($"DISTRICT", $"YEAR", $"MONTH")
     .agg(count($"INCIDENT_NUMBER").alias("count"))
 
-    .withColumn("rn", row_number().over(window_1))
-    .withColumn("month_count", count($"DISTRICT").over(window_2))
-    .filter(abs($"rn"-($"month_count"+1)/2) <= 0.5)
+  district_2_.createTempView("d2")
+  val district_2 = spark.sql(s"""
+       select
+         DISTRICT,
+         APPROX_PERCENTILE(count, 0,5) as median
+       from d2
+       group by DISTRICT
+    """)
 
-    .groupBy($"DISTRICT")
-    .agg(avg($"count").alias("median"))
+
 
   val district_3 = crime
     .groupBy($"DISTRICT", $"crime_group")
@@ -90,6 +87,7 @@ object BostonCrime extends App{
     .mode("OVERWRITE")
     .save(resultFolder)
 
+  result.show()
   spark.stop()
 
 }
